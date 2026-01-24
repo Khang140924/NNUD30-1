@@ -4,37 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
-    <script defer src="main.js">
-    </script>
+    <style>
+        /* CSS một chút cho dễ nhìn */
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top;}
+        th { background-color: #f2f2f2; }
+        .deleted { text-decoration: line-through; color: gray; background-color: #f9f9f9; }
+        ul { margin: 0; padding-left: 20px; }
+        .input-group { margin-bottom: 10px; padding: 10px; background: #eee; border-radius: 5px; }
+    </style>
+    <script defer src="main.js"></script>
 </head>
 <body>
     <div>
         <table id="post-table">
             <thead>
-                <th>
-                    <td>
-                        ID
-                    </td>
-                    <td>
-                        title
-                    </td>
-                    <td>
-                        views
-                    </td>
-                </th>
+                <tr> <th style="width: 50px;">ID</th>
+                    <th style="width: 20%;">Title</th>
+                    <th style="width: 10%;">Views</th>
+                    <th>Comments</th> <th style="width: 100px;">Action</th>
+                </tr>
             </thead>
             <tbody id="post-body">
-                
-            </tbody>
+                </tbody>
         </table>
     </div>
-    <div>
-        <div>
-            <input type="text" id="id_txt">
-            <input type="text" id="title_txt">
-            <input type="text" id="views_txt">
-            <input type="submit" value="Save" onclick="saveData()">
-        </div>
+
+    <div class="input-group">
+        <h3>Quản lý bài viết</h3>
+        <label>ID (Để trống = Tạo mới):</label>
+        <input type="text" id="id_txt" placeholder="Auto" readonly style="background: #ddd;">
+        <br><br>
+        <label>Title:</label>
+        <input type="text" id="title_txt" placeholder="Nhập tiêu đề">
+        <label>Views:</label>
+        <input type="text" id="views_txt" placeholder="Nhập views">
+        <input type="submit" value="Save" onclick="saveData()">
     </div>
 </body>
 </html>

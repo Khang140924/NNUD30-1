@@ -30,6 +30,24 @@
       "title": "heheheehehehe",
       "views": "800",
       "id": "6"
+    },
+    {
+      "id": "7",
+      "title": "helo",
+      "views": "2222",
+      "isDeleted": true
+    },
+    {
+      "id": "8",
+      "title": "haha",
+      "views": "",
+      "isDeleted": false
+    },
+    {
+      "id": "9",
+      "title": "asd",
+      "views": "22",
+      "isDeleted": false
     }
   ],
   "comments": [
@@ -42,6 +60,36 @@
       "id": "2",
       "text": "another comment about post 1",
       "postId": "1"
+    },
+    {
+      "id": "3",
+      "postId": "7",
+      "text": "alo",
+      "isDeleted": true
+    },
+    {
+      "id": "4",
+      "postId": "1",
+      "text": "das",
+      "isDeleted": false
+    },
+    {
+      "id": "5",
+      "postId": "6",
+      "text": "1234",
+      "isDeleted": false
+    },
+    {
+      "id": "6",
+      "postId": "7",
+      "text": "czx",
+      "isDeleted": true
+    },
+    {
+      "id": "7",
+      "postId": "4",
+      "text": "helo",
+      "isDeleted": false
     }
   ],
   "profile": {

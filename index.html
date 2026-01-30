@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Danh sách Sản phẩm</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+
+        /* === THANH CÔNG CỤ === */
+        .toolbar {
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        input, select {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            min-width: 150px;
+        }
+
+        /* === BẢNG DỮ LIỆU === */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        th {
+            background-color: #333;
+            color: #fff;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+
+        /* Yêu cầu: 1 dòng đen, 1 dòng trắng */
+        tbody tr:nth-child(odd) {
+            background-color: #ffffff;
+            color: #000000;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #000000;
+            color: #ffffff;
+        }
+
+        /* Hình ảnh trong bảng */
+        .product-img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover; /* Đảm bảo khung hình vuông đẹp */
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+        }
+
+        /* === PHÂN TRANG === */
+        .pagination {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .pagination button {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            background-color: white;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .pagination button.active {
+            background-color: #333;
+            color: white;
+            font-weight: bold;
+        }
+
+        .pagination button:disabled {
+            background-color: #eee;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="toolbar">
+        <div class="control-group">
+            <label>🔍 Tìm kiếm theo tên:</label>
+            <input type="text" id="searchInput" placeholder="Nhập tên sản phẩm..." oninput="handleSearch(this.value)">
+        </div>
+
+        <div class="control-group">
+            <label>🔃 Sắp xếp:</label>
+            <select id="sortSelect" onchange="handleSort(this.value)">
+                <option value="">-- Mặc định --</option>
+                <option value="price-asc">💰 Giá: Thấp đến Cao</option>
+                <option value="price-desc">💰 Giá: Cao đến Thấp</option>
+                <option value="title-asc">🅰️ Tên: A - Z</option>
+                <option value="title-desc">🅰️ Tên: Z - A</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>📄 Số dòng/trang:</label>
+            <select id="pageSizeSelect" onchange="handlePageSize(this.value)">
+                <option value="5">5 dòng</option>
+                <option value="10">10 dòng</option>
+                <option value="20">20 dòng</option>
+            </select>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 50px;">ID</th>
+                <th style="width: 100px;">Hình ảnh</th>
+                <th>Tên sản phẩm</th>
+                <th style="width: 150px;">Giá ($)</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            <tr><td colspan="4" style="text-align:center;">Đang tải dữ liệu...</td></tr>
+        </tbody>
+    </table>
+
+    <div class="pagination" id="pagination"></div>
+
+    <script>
+        // === 1. CẤU HÌNH & TRẠNG THÁI ===
+        const API_URL = 'https://api.escuelajs.co/api/v1/products';
+        let originalData = []; // Dữ liệu gốc từ API
+        let filteredData = []; // Dữ liệu sau khi lọc/sort
+        
+        let state = {
+            page: 1,
+            limit: 5,
+            search: '',
+            sortBy: '' // 'price-asc', 'price-desc', 'title-asc', 'title-desc'
+        };
+
+        // === 2. HÀM KHỞI TẠO ===
+        async function init() {
+            try {
+                const response = await fetch(API_URL);
+                originalData = await response.json();
+                
+                // Sao chép dữ liệu gốc sang filteredData để xử lý
+                filteredData = [...originalData];
+                
+                renderTable();
+            } catch (error) {
+                console.error("Lỗi tải API:", error);
+                document.getElementById('tableBody').innerHTML = `<tr><td colspan="4" style="color:red; text-align:center;">Lỗi tải dữ liệu!</td></tr>`;
+            }
+        }
+
+        // === 3. XỬ LÝ LOGIC (Filter -> Sort -> Paginate) ===
+        function processData() {
+            // A. Lọc theo tên (Tìm kiếm)
+            let result = originalData.filter(item => 
+                item.title.toLowerCase().includes(state.search.toLowerCase())
+            );
+
+            // B. Sắp xếp
+            if (state.sortBy) {
+                result.sort((a, b) => {
+                    const [field, order] = state.sortBy.split('-');
+                    
+                    if (field === 'price') {
+                        return order === 'asc' ? a.price - b.price : b.price - a.price;
+                    } else if (field === 'title') {
+                        const titleA = a.title.toLowerCase();
+                        const titleB = b.title.toLowerCase();
+                        if (titleA < titleB) return order === 'asc' ? -1 : 1;
+                        if (titleA > titleB) return order === 'asc' ? 1 : -1;
+                        return 0;
+                    }
+                });
+            }
+
+            filteredData = result;
+            
+            // Reset về trang 1 nếu số lượng trang thay đổi và trang hiện tại vượt quá
+            const totalPages = Math.ceil(filteredData.length / state.limit);
+            if (state.page > totalPages) state.page = totalPages || 1;
+        }
+
+        // === 4. RENDER GIAO DIỆN ===
+        function renderTable() {
+            processData(); // Chạy lại logic xử lý dữ liệu
+
+            const tbody = document.getElementById('tableBody');
+            const paginationDiv = document.getElementById('pagination');
+
+            // Tính toán phân trang
+            const start = (state.page - 1) * state.limit;
+            const end = start + state.limit;
+            const pageData = filteredData.slice(start, end);
+
+            // Xóa nội dung cũ
+            tbody.innerHTML = '';
+
+            if (pageData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Không tìm thấy kết quả</td></tr>`;
+                paginationDiv.innerHTML = '';
+                return;
+            }
+
+            // Render từng dòng
+            pageData.forEach(item => {
+                // Lấy hình đầu tiên, nếu không có thì dùng hình mặc định
+                let imgUrl = (item.images && item.images.length > 0) ? item.images[0] : 'https://via.placeholder.com/80';
+                
+                // Xử lý chuỗi hình ảnh bị lỗi JSON (một số API trả về chuỗi stringify)
+                if (typeof imgUrl === 'string' && imgUrl.startsWith('["')) {
+                    try { imgUrl = JSON.parse(imgUrl)[0]; } catch(e) {}
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.id}</td>
+                    <td>
+                        <img src="${imgUrl}" alt="${item.title}" class="product-img" onerror="this.src='https://via.placeholder.com/80?text=No+Image'">
+                    </td>
+                    <td>${item.title}</td>
+                    <td><b>$${item.price}</b></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            renderPagination();
+        }
+
+        function renderPagination() {
+            const paginationDiv = document.getElementById('pagination');
+            const totalPages = Math.ceil(filteredData.length / state.limit);
+            
+            let html = '';
+            
+            // Chỉ hiện phân trang nếu có nhiều hơn 1 trang
+            if (totalPages > 1) {
+                // Nút Previous
+                html += `<button onclick="changePage(${state.page - 1})" ${state.page === 1 ? 'disabled' : ''}>«</button>`;
+
+                // Logic hiển thị số trang rút gọn (để tránh quá dài)
+                let startPage = Math.max(1, state.page - 2);
+                let endPage = Math.min(totalPages, state.page + 2);
+
+                if (startPage > 1) html += `<button onclick="changePage(1)">1</button><span>...</span>`;
+
+                for (let i = startPage; i <= endPage; i++) {
+                    html += `<button onclick="changePage(${i})" class="${i === state.page ? 'active' : ''}">${i}</button>`;
+                }
+
+                if (endPage < totalPages) html += `<span>...</span><button onclick="changePage(${totalPages})">${totalPages}</button>`;
+
+                // Nút Next
+                html += `<button onclick="changePage(${state.page + 1})" ${state.page === totalPages ? 'disabled' : ''}>»</button>`;
+            }
+
+            paginationDiv.innerHTML = html;
+        }
+
+        // === 5. XỬ LÝ SỰ KIỆN ===
+        function handleSearch(val) {
+            state.search = val;
+            state.page = 1; // Reset về trang 1 khi tìm kiếm
+            renderTable();
+        }
+
+        function handleSort(val) {
+            state.sortBy = val;
+            renderTable();
+        }
+
+        function handlePageSize(val) {
+            state.limit = parseInt(val);
+            state.page = 1; // Reset về trang 1
+            renderTable();
+        }
+
+        function changePage(newPage) {
+            if (newPage < 1 || newPage > Math.ceil(filteredData.length / state.limit)) return;
+            state.page = newPage;
+            renderTable();
+        }
+
+        // Chạy khi tải trang
+        init();
+
+    </script>
+</body>
+</html>

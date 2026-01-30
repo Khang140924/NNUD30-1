@@ -1,142 +1,214 @@
 const API_URL = 'http://localhost:3000';
 
+// === BIẾN TOÀN CỤC ===
+let globalPosts = [];    // Chứa tất cả bài viết
+let globalComments = []; // Chứa tất cả bình luận
+let config = {
+    page: 1,         // Trang hiện tại
+    limit: 5,        // Số dòng mỗi trang
+    search: '',      // Từ khóa tìm kiếm
+    sortBy: 'id',    // Cột sắp xếp (id, title, views)
+    sortOrder: 'desc' // Thứ tự: asc (tăng), desc (giảm)
+};
+
 LoadData();
 
+// === 1. TẢI DỮ LIỆU ===
 async function LoadData() {
     try {
-        // Lấy Posts và Comments cùng lúc
         let [resPosts, resComments] = await Promise.all([
             fetch(API_URL + '/posts'),
             fetch(API_URL + '/comments')
         ]);
+        globalPosts = await resPosts.json();
+        globalComments = await resComments.json();
 
-        let posts = await resPosts.json();
-        let comments = await resComments.json();
-
-        let body = document.getElementById('post-body');
-        body.innerHTML = "";
-
-        // Duyệt ngược để bài mới nhất lên đầu
-        // Sắp xếp bài xóa mềm xuống dưới cùng nếu muốn, hoặc để nguyên
-        posts.reverse().forEach(post => {
-            // Lọc comment của bài viết này
-            let postComments = comments.filter(c => c.postId == post.id);
-            body.innerHTML += convertDataToHTML(post, postComments);
-        });
-
+        // Gọi hàm hiển thị sau khi có dữ liệu
+        renderTable();
     } catch (error) {
-        console.log(error);
+        console.error("Lỗi tải dữ liệu:", error);
     }
 }
 
-function convertDataToHTML(post, comments) {
-    // 1. Xử lý hiển thị Xóa mềm
-    const isDel = post.isDeleted;
-    const rowClass = isDel ? 'deleted' : '';
-    const btnLabel = isDel ? 'Khôi phục' : 'Xóa';
-    // Nếu đã xóa -> gọi hàm Restore, chưa xóa -> gọi hàm Delete
-    const actionFunc = isDel ? `RestorePost('${post.id}')` : `Delete('${post.id}')`;
+// === 2. XỬ LÝ & HIỂN THỊ (QUAN TRỌNG NHẤT) ===
+function renderTable() {
+    // A. LỌC (SEARCH)
+    let filtered = globalPosts.filter(p =>
+        p.title.toLowerCase().includes(config.search.toLowerCase())
+    );
 
-    // 2. Xử lý hiển thị danh sách Comment
-    let commentListHTML = '<ul style="list-style: none; padding: 0;">';
-    comments.forEach(c => {
-        const cmtStyle = c.isDeleted ? 'text-decoration: line-through; color: #ccc;' : '';
-        commentListHTML += `
-            <li style="border-bottom: 1px dashed #eee; margin-bottom: 5px; ${cmtStyle}">
-                <b>#${c.id}:</b> ${c.text} 
-                ${!c.isDeleted ? 
-                    `<button onclick="DeleteComment('${c.id}')" style="color:red; font-size:10px; cursor:pointer;">x</button>` 
-                    : ''}
-            </li>
-        `;
+    // B. SẮP XẾP (SORT)
+    filtered.sort((a, b) => {
+        let valA = a[config.sortBy];
+        let valB = b[config.sortBy];
+
+        // Xử lý đặc biệt cho Views và ID (chuyển về số để so sánh đúng)
+        if (config.sortBy === 'views' || config.sortBy === 'id') {
+            valA = Number(valA) || 0; // Nếu lỗi/rỗng thì tính là 0
+            valB = Number(valB) || 0;
+        } else {
+            // Chuyển về chữ thường nếu là Title
+            valA = valA.toString().toLowerCase();
+            valB = valB.toString().toLowerCase();
+        }
+
+        if (valA < valB) return config.sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return config.sortOrder === 'asc' ? 1 : -1;
+        return 0;
     });
-    commentListHTML += '</ul>';
 
-    // 3. Form thêm comment (Chỉ hiện khi Post chưa bị xóa)
-    const addCommentHTML = !isDel ? `
-        <div style="display:flex; gap:5px; margin-top:5px;">
-            <input type="text" id="cmt-input-${post.id}" placeholder="Viết bình luận..." style="width:100%">
-            <button onclick="AddComment('${post.id}')">Gửi</button>
-        </div>
-    ` : '<small>(Đã khóa bình luận)</small>';
+    // C. PHÂN TRANG (PAGINATION)
+    let totalItems = filtered.length;
+    let totalPages = Math.ceil(totalItems / config.limit);
+
+    // Nếu trang hiện tại lớn hơn tổng trang -> lùi về trang cuối
+    if (config.page > totalPages) config.page = totalPages > 0 ? totalPages : 1;
+
+    let start = (config.page - 1) * config.limit;
+    let end = start + config.limit;
+    let pageData = filtered.slice(start, end);
+
+    // D. RENDER HTML
+    let tbody = document.querySelector('#post-table tbody') || document.getElementById('post-body');
+    // Lưu ý: ID trong file HTML của bạn là gì thì sửa lại dòng trên (ví dụ 'post-body')
+
+    tbody.innerHTML = "";
+
+    if (pageData.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='5' style='text-align:center;'>Không tìm thấy dữ liệu</td></tr>";
+    }
+
+    pageData.forEach(post => {
+        let postComments = globalComments.filter(c => c.postId == post.id);
+        tbody.innerHTML += convertDataToHTML(post, postComments);
+    });
+
+    // E. VẼ NÚT PHÂN TRANG
+    renderPagination(totalPages);
+}
+
+// === 3. CÁC HÀM SỰ KIỆN ===
+function handleSearch(val) {
+    config.search = val.trim();
+    config.page = 1; // Reset về trang 1 khi tìm kiếm
+    renderTable();
+}
+
+function handleSort(val) {
+    let [field, order] = val.split('-');
+    config.sortBy = field;
+    config.sortOrder = order;
+    renderTable();
+}
+
+function handlePageSize(val) {
+    config.limit = Number(val);
+    config.page = 1;
+    renderTable();
+}
+
+function changePage(page) {
+    config.page = page;
+    renderTable();
+}
+
+// === 4. VẼ NÚT PHÂN TRANG ===
+function renderPagination(totalPages) {
+    let div = document.getElementById('pagination');
+    let html = '';
+
+    if (totalPages > 1) {
+        for (let i = 1; i <= totalPages; i++) {
+            let activeClass = (i === config.page) ? 'active' : '';
+            html += `<button class="${activeClass}" onclick="changePage(${i})">${i}</button>`;
+        }
+    }
+    div.innerHTML = html;
+}
+
+// === 5. CÁC HÀM CRUD (GIỮ NGUYÊN LOGIC CŨ) ===
+function convertDataToHTML(post, comments) {
+    const isDel = post.isDeleted;
+    const btnLabel = isDel ? '♻️ Khôi phục' : '🗑️ Xóa';
+    const actionFunc = isDel ? `RestorePost('${post.id}')` : `Delete('${post.id}')`;
+    const rowDecoration = isDel ? 'opacity: 0.5;' : '';
+
+    // Render danh sách comment
+    let commentList = comments.map(c => {
+        let style = c.isDeleted ? 'text-decoration: line-through; color: #888;' : '';
+        let delBtn = !c.isDeleted ?
+            `<button onclick="DeleteComment('${c.id}')" style="color:red; border:none; background:none; cursor:pointer;">x</button>` : '';
+        return `<li style="${style}"><b>User:</b> ${c.text} ${delBtn}</li>`;
+    }).join('');
+
+    // Form thêm comment
+    let addCmtForm = !isDel ? `
+        <div style="display:flex; margin-top:5px;">
+            <input type="text" id="cmt-input-${post.id}" placeholder="Bình luận..." style="width:70%">
+            <button onclick="AddComment('${post.id}')" style="width:30%">Gửi</button>
+        </div>` : '<small><i>Đã khóa</i></small>';
 
     return `
-        <tr class="${rowClass}">
+        <tr style="${rowDecoration}">
             <td>${post.id}</td>
-            <td onclick="fillForm('${post.id}', '${post.title}', '${post.views}')" style="cursor:pointer" title="Click để sửa">${post.title}</td>
+            <td onclick="fillForm('${post.id}', '${post.title}', '${post.views}')" style="cursor:pointer; font-weight:bold;">
+                ${post.title} ${isDel ? '(Đã xóa)' : ''}
+            </td>
             <td>${post.views}</td>
             <td>
-                ${commentListHTML}
-                ${addCommentHTML}
+                <ul style="padding-left: 15px; margin: 0;">${commentList}</ul>
+                ${addCmtForm}
             </td>
             <td>
-                <input type='button' value='${btnLabel}' onclick="${actionFunc}"/>
+                <button onclick="${actionFunc}">${btnLabel}</button>
             </td>
         </tr>
     `;
 }
 
-// Hàm hỗ trợ điền dữ liệu lên form khi click vào tên bài viết
+// Điền dữ liệu lên form
 function fillForm(id, title, views) {
     document.getElementById("id_txt").value = id;
     document.getElementById("title_txt").value = title;
     document.getElementById("views_txt").value = views;
 }
 
+// Lưu (Thêm mới hoặc Cập nhật)
 async function saveData() {
     let id = document.getElementById("id_txt").value;
     let title = document.getElementById("title_txt").value;
     let view = document.getElementById('views_txt').value;
 
-    if(!title) { alert("Vui lòng nhập tiêu đề!"); return; }
+    if (!title) { alert("Vui lòng nhập tiêu đề!"); return; }
 
-    // === TRƯỜNG HỢP TẠO MỚI (ID RỖNG) ===
-    if (id === "") {
-        // Lấy danh sách để tính ID tự tăng
-        let res = await fetch(API_URL + '/posts');
-        let posts = await res.json();
-        
-        // Logic: Chuyển ID sang số -> Tìm Max -> Cộng 1 -> Chuyển về chuỗi
-        let ids = posts.map(p => Number(p.id)).filter(n => !isNaN(n));
-        let maxId = ids.length > 0 ? Math.max(...ids) : 0;
+    if (id === "") { // THÊM MỚI
+        // Tạo ID tự tăng
+        let maxId = globalPosts.reduce((max, p) => Math.max(max, Number(p.id) || 0), 0);
         let newId = (maxId + 1).toString();
 
         await fetch(API_URL + '/posts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                id: newId,
-                title: title,
-                views: view,
-                isDeleted: false // Mặc định chưa xóa
-            })
+            body: JSON.stringify({ id: newId, title: title, views: view, isDeleted: false })
         });
-        console.log("Tạo mới thành công");
-    } 
-    // === TRƯỜNG HỢP CẬP NHẬT (CÓ ID) ===
-    else {
-        // Dùng PATCH để chỉ sửa title và views, giữ nguyên isDeleted
+    } else { // CẬP NHẬT
         await fetch(API_URL + '/posts/' + id, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                title: title,
-                views: view
-            })
+            body: JSON.stringify({ title: title, views: view })
         });
-        console.log("Cập nhật thành công");
     }
 
-    // Reset form và load lại
+    // Reset form
     document.getElementById("id_txt").value = "";
     document.getElementById("title_txt").value = "";
     document.getElementById("views_txt").value = "";
-    LoadData();
+    LoadData(); // Load lại để cập nhật bảng
 }
 
-// === XÓA MỀM POST ===
+// Xóa bài viết
 async function Delete(id) {
-    if(!confirm("Bạn chắc chắn muốn xóa bài này?")) return;
+    if (!confirm("Xóa bài viết này?")) return;
     await fetch(API_URL + '/posts/' + id, {
         method: "PATCH",
         headers: { 'Content-Type': 'application/json' },
@@ -145,7 +217,7 @@ async function Delete(id) {
     LoadData();
 }
 
-// === KHÔI PHỤC POST ===
+// Khôi phục bài viết
 async function RestorePost(id) {
     await fetch(API_URL + '/posts/' + id, {
         method: "PATCH",
@@ -155,34 +227,27 @@ async function RestorePost(id) {
     LoadData();
 }
 
-// === THÊM COMMENT ===
+// Thêm comment
 async function AddComment(postId) {
     let input = document.getElementById(`cmt-input-${postId}`);
     let text = input.value;
-    if(!text) return alert("Vui lòng nhập nội dung!");
+    if (!text) return alert("Chưa nhập nội dung!");
 
-    // Tính ID cho comment
-    let res = await fetch(API_URL + '/comments');
-    let comments = await res.json();
-    let ids = comments.map(c => Number(c.id)).filter(n => !isNaN(n));
-    let newId = ((ids.length > 0 ? Math.max(...ids) : 0) + 1).toString();
+    // Tạo ID comment tự tăng
+    let maxId = globalComments.reduce((max, c) => Math.max(max, Number(c.id) || 0), 0);
+    let newId = (maxId + 1).toString();
 
     await fetch(API_URL + '/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            id: newId,
-            postId: postId.toString(),
-            text: text, // Lưu ý: db.json cũ của bạn dùng key là "text"
-            isDeleted: false
-        })
+        body: JSON.stringify({ id: newId, postId: postId.toString(), text: text, isDeleted: false })
     });
     LoadData();
 }
 
-// === XÓA MỀM COMMENT ===
+// Xóa comment
 async function DeleteComment(cmtId) {
-    if(!confirm("Xóa bình luận này?")) return;
+    if (!confirm("Xóa bình luận?")) return;
     await fetch(API_URL + '/comments/' + cmtId, {
         method: "PATCH",
         headers: { 'Content-Type': 'application/json' },

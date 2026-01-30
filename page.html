@@ -1,45 +1,192 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Quản lý Bài viết & Comment</title>
     <style>
-        /* CSS một chút cho dễ nhìn */
-        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top;}
-        th { background-color: #f2f2f2; }
-        .deleted { text-decoration: line-through; color: gray; background-color: #f9f9f9; }
-        ul { margin: 0; padding-left: 20px; }
-        .input-group { margin-bottom: 10px; padding: 10px; background: #eee; border-radius: 5px; }
+        /* === 1. CẤU TRÚC CHUNG === */
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            color: #333;
+        }
+
+        /* === 2. THANH CÔNG CỤ (Search, Sort, Limit) === */
+        .toolbar {
+            background-color: #f4f4f4;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .toolbar input,
+        .toolbar select {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        /* === 3. BẢNG DỮ LIỆU (QUAN TRỌNG: DÒNG ĐEN - TRẮNG) === */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        /* Header bảng */
+        thead tr {
+            background-color: #333;
+            color: white;
+        }
+
+        /* Dòng LẺ: Nền trắng, Chữ đen */
+        tbody tr:nth-child(odd) {
+            background-color: #ffffff;
+            color: #000000;
+        }
+
+        /* Dòng CHẴN: Nền đen, Chữ trắng */
+        tbody tr:nth-child(even) {
+            background-color: #000000;
+            color: #ffffff;
+        }
+
+        /* Xử lý các nút bấm/input trong dòng nền đen để dễ nhìn */
+        tbody tr:nth-child(even) input,
+        tbody tr:nth-child(even) button {
+            color: black;
+            /* Chữ trong nút vẫn màu đen cho dễ đọc */
+        }
+
+        /* Style cho comment */
+        ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        /* === 4. PHÂN TRANG === */
+        .pagination {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .pagination button {
+            padding: 8px 12px;
+            cursor: pointer;
+            background: #fff;
+            border: 1px solid #ccc;
+        }
+
+        .pagination button.active {
+            background-color: #333;
+            color: white;
+            font-weight: bold;
+        }
+
+        /* === 5. FORM NHẬP LIỆU === */
+        .input-group {
+            margin-top: 30px;
+            padding: 20px;
+            background: #eee;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+
+        .input-group input[type="text"] {
+            padding: 5px;
+            margin-bottom: 10px;
+            width: 200px;
+        }
     </style>
     <script defer src="main.js"></script>
 </head>
+
 <body>
+
+    <div class="toolbar">
+        <div>
+            <label>🔍 Tìm kiếm:</label>
+            <input type="text" placeholder="Nhập tên bài viết..." onkeyup="handleSearch(this.value)"
+                style="width: 200px;">
+        </div>
+
+        <div>
+            <label>🔃 Sắp xếp:</label>
+            <select onchange="handleSort(this.value)">
+                <option value="id-desc">Mới nhất</option>
+                <option value="title-asc">Tên (A-Z)</option>
+                <option value="title-desc">Tên (Z-A)</option>
+                <option value="views-asc">Views (Thấp -> Cao)</option>
+                <option value="views-desc">Views (Cao -> Thấp)</option>
+            </select>
+        </div>
+
+        <div>
+            <label>📄 Hiển thị:</label>
+            <select onchange="handlePageSize(this.value)">
+                <option value="5">5 dòng</option>
+                <option value="10">10 dòng</option>
+                <option value="20">20 dòng</option>
+            </select>
+        </div>
+    </div>
+
     <div>
         <table id="post-table">
             <thead>
-                <tr> <th style="width: 50px;">ID</th>
+                <tr>
+                    <th style="width: 50px;">ID</th>
                     <th style="width: 20%;">Title</th>
                     <th style="width: 10%;">Views</th>
-                    <th>Comments</th> <th style="width: 100px;">Action</th>
+                    <th>Comments</th>
+                    <th style="width: 100px;">Action</th>
                 </tr>
             </thead>
             <tbody id="post-body">
-                </tbody>
+            </tbody>
         </table>
     </div>
 
+    <div id="pagination" class="pagination"></div>
+
     <div class="input-group">
-        <h3>Quản lý bài viết</h3>
-        <label>ID (Để trống = Tạo mới):</label>
-        <input type="text" id="id_txt" placeholder="Auto" readonly style="background: #ddd;">
-        <br><br>
-        <label>Title:</label>
+        <h3 style="margin-top: 0;">Quản lý bài viết</h3>
+
+        <label>ID (Auto):</label>
+        <input type="text" id="id_txt" placeholder="Tự động" readonly style="background: #ccc; color: #555;">
+
+        <label style="margin-left: 10px;">Title:</label>
         <input type="text" id="title_txt" placeholder="Nhập tiêu đề">
-        <label>Views:</label>
+
+        <label style="margin-left: 10px;">Views:</label>
         <input type="text" id="views_txt" placeholder="Nhập views">
-        <input type="submit" value="Save" onclick="saveData()">
+
+        <br>
+        <input type="submit" value="Lưu Dữ Liệu" onclick="saveData()"
+            style="padding: 8px 20px; background: #333; color: white; border: none; cursor: pointer;">
+        <input type="button" value="Reset Form" onclick="fillForm('','','')"
+            style="padding: 8px 20px; cursor: pointer;">
     </div>
+
 </body>
+
 </html>
